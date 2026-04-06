@@ -35,11 +35,15 @@ export interface PaginatedResponse<T> {
 }
 
 export interface SearchFlightPlanRequest {
+  search?: string;  // Free-text search
   carrier?: string;
   flightNumber?: string;
+  flightPlanType?: string;  // Filter by type (Arrival, Departure, TowOutMovement)
   stand?: string;
   apron?: string;
   terminal?: string;
+  originDateFrom?: string;  // Date range filter
+  originDateTo?: string;    // Date range filter
   page?: number;
   limit?: number;
 }

@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { FlightPlanEntity } from '../entities/flight-plan.entity';
 import { StandEntity } from '../entities/stand.entity';
+import { UserEntity } from '../entities/user.entity';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -15,11 +17,16 @@ export class SeedService {
     private readonly flightPlanRepository: Repository<FlightPlanEntity>,
     @InjectRepository(StandEntity)
     private readonly standRepository: Repository<StandEntity>,
+    @InjectRepository(UserEntity)
+    private readonly userRepository: Repository<UserEntity>,
   ) {}
 
   async seed() {
     try {
       this.logger.log('🌱 Starting database seeding...');
+
+      // Seed admin user
+      await this.seedAdminUser();
 
       // Seed flight plans
       await this.seedFlightPlans();
@@ -30,6 +37,39 @@ export class SeedService {
       this.logger.log('✅ Database seeding completed successfully');
     } catch (error) {
       this.logger.error('❌ Database seeding failed', error.stack);
+      throw error;
+    }
+  }
+
+  private async seedAdminUser() {
+    try {
+      // Check if admin user already exists
+      const existingAdmin = await this.userRepository.findOne({
+        where: { email: 'admin@apron.local' },
+      });
+
+      if (existingAdmin) {
+        this.logger.log('⏭️  Admin user already exists, skipping...');
+        return;
+      }
+
+      // Create default admin user
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash('admin123', saltRounds);
+
+      const adminUser = this.userRepository.create({
+        email: 'admin@apron.local',
+        password: hashedPassword,
+        firstName: 'System',
+        lastName: 'Administrator',
+        role: 'admin',
+        isActive: true,
+      });
+
+      await this.userRepository.save(adminUser);
+      this.logger.log('✅ Created default admin user (admin@apron.local / admin123)');
+    } catch (error) {
+      this.logger.error('Error seeding admin user', error.stack);
       throw error;
     }
   }

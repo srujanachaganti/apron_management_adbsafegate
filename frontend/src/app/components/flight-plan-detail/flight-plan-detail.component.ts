@@ -2,7 +2,9 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FlightPlansService } from '../../services/flight-plans.service';
+import { StandAssignmentsService } from '../../services/stand-assignments.service';
 import { FlightPlan } from '../../models/flight-plan.model';
+import { StandAssignment } from '../../models/stand-assignment.model';
 
 @Component({
   selector: 'app-flight-plan-detail',
@@ -132,22 +134,77 @@ import { FlightPlan } from '../../models/flight-plan.model';
           </div>
         </div>
 
-        <div *ngIf="linkedPlans().length > 0" class="linked-plans">
-          <h3>Linked Flight Plans</h3>
+        <!-- Stand Assignments Section -->
+        <div *ngIf="standAssignments().length > 0" class="assignments-section">
+          <h3>🅿️ Stand Assignments</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Stand</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let assignment of standAssignments()">
+                <td>
+                  <strong>{{ assignment.standId }}</strong>
+                  <br />
+                  <small>{{ assignment.stand?.apron || '-' }}</small>
+                </td>
+                <td>{{ assignment.fromTime | date: 'short' }}</td>
+                <td>{{ assignment.toTime | date: 'short' }}</td>
+                <td>{{ assignment.remarks || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Linked Flight Plans Section -->
+        <div *ngIf="linkedPlans().length > 1" class="linked-plans">
+          <h3>🔗 Linked Flight Plans</h3>
           <table>
             <thead>
               <tr>
                 <th>ID</th>
                 <th>Callsign</th>
                 <th>Type</th>
+                <th>Route</th>
+                <th>Stand</th>
                 <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let plan of linkedPlans()">
+              <tr *ngFor="let plan of linkedPlans()" [class.current]="plan.id === flightPlan()!.id">
                 <td>{{ plan.id }}</td>
                 <td>{{ plan.calculatedCallsign }}</td>
                 <td>{{ plan.flightPlanType }}</td>
+                <td>{{ plan.adep }} → {{ plan.ades }}</td>
+                <td>{{ plan.stand || '-' }}</td>
+                <td>
+                  <span [class]="'status-' + plan.flightPlanAction.toLowerCase()">
+                    {{ plan.flightPlanAction }}
+                  </span>
+                </td>
+                <td>
+                  <a *ngIf="plan.id !== flightPlan()!.id" [routerLink]="['/flight-plans', plan.id]" class="view-link">
+                    View
+                  </a>
+                  <span *ngIf="plan.id === flightPlan()!.id" class="current-label">Current</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <ng-template #notFound>
+        <p class="not-found">Flight plan not found</p>
+      </ng-template>
+    </div>
+  `,
                 <td>
                   <span [class]="'status-' + plan.flightPlanAction.toLowerCase()">
                     {{ plan.flightPlanAction }}
@@ -267,8 +324,16 @@ import { FlightPlan } from '../../models/flight-plan.model';
         border-top: 2px solid #f0f0f0;
       }
 
-      .linked-plans h3 {
+      .linked-plans h3,
+      .assignments-section h3 {
         color: #667eea;
+        margin-bottom: 1rem;
+      }
+
+      .assignments-section {
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 2px solid #f0f0f0;
       }
 
       table {
@@ -290,6 +355,33 @@ import { FlightPlan } from '../../models/flight-plan.model';
         border-bottom: 1px solid #eee;
       }
 
+      tr:hover {
+        background: #f9f9f9;
+      }
+
+      tr.current {
+        background: #e8f4fd;
+      }
+
+      .view-link {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .view-link:hover {
+        text-decoration: underline;
+      }
+
+      .current-label {
+        color: #28a745;
+        font-weight: 600;
+      }
+
+      small {
+        color: #888;
+      }
+
       .not-found {
         text-align: center;
         padding: 2rem;
@@ -301,16 +393,18 @@ import { FlightPlan } from '../../models/flight-plan.model';
 export class FlightPlanDetailComponent implements OnInit {
   flightPlan = signal<FlightPlan | null>(null);
   linkedPlans = signal<FlightPlan[]>([]);
+  standAssignments = signal<StandAssignment[]>([]);
   loading = signal(true);
 
   constructor(
     private route: ActivatedRoute,
     private flightPlansService: FlightPlansService,
+    private standAssignmentsService: StandAssignmentsService,
   ) {}
 
   ngOnInit() {
     this.route.params.subscribe((params) => {
-      const id = params['id'];
+      const id = +params['id'];
       this.loadFlightPlan(id);
     });
   }
@@ -320,9 +414,8 @@ export class FlightPlanDetailComponent implements OnInit {
     this.flightPlansService.getById(id).subscribe({
       next: (plan) => {
         this.flightPlan.set(plan);
-        if (plan.linkedFlightId) {
-          this.loadLinkedPlans(plan.linkedFlightId);
-        }
+        this.loadLinkedPlans(id);
+        this.loadStandAssignments(id);
         this.loading.set(false);
       },
       error: (error) => {
@@ -332,13 +425,24 @@ export class FlightPlanDetailComponent implements OnInit {
     });
   }
 
-  loadLinkedPlans(flightId: string) {
-    this.flightPlansService.getLinkedFlightPlans(flightId).subscribe({
+  loadLinkedPlans(id: number) {
+    this.flightPlansService.getLinkedFlightPlans(id).subscribe({
       next: (plans) => {
         this.linkedPlans.set(plans);
       },
       error: (error) => {
         console.error('Error loading linked plans:', error);
+      },
+    });
+  }
+
+  loadStandAssignments(flightPlanId: number) {
+    this.standAssignmentsService.getByFlightPlan(flightPlanId).subscribe({
+      next: (assignments) => {
+        this.standAssignments.set(assignments);
+      },
+      error: (error) => {
+        console.error('Error loading stand assignments:', error);
       },
     });
   }

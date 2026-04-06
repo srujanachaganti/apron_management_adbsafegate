@@ -1,109 +1,122 @@
 #!/bin/bash
-
-# Apron Management System - Quick Setup Script
-# Run this script to set up both backend and frontend
+# Apron Management System - Quick Setup Script (Unix/Linux/macOS)
+# ================================================================
 
 set -e
 
+echo ""
 echo "╔═══════════════════════════════════════════════════════════╗"
 echo "║     Apron Management System - Full Stack Setup            ║"
 echo "║          NestJS Backend + Angular Frontend                ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
-# Colors for output
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
 # Check prerequisites
-echo -e "${BLUE}📋 Checking prerequisites...${NC}"
+echo "[1/6] Checking prerequisites..."
 echo ""
 
 if ! command -v node &> /dev/null; then
     echo "❌ Node.js is not installed. Please install Node.js 18+ from https://nodejs.org"
     exit 1
 fi
-echo -e "${GREEN}✓ Node.js $(node -v)${NC}"
+echo "✓ Node.js $(node -v)"
 
 if ! command -v npm &> /dev/null; then
     echo "❌ npm is not installed."
     exit 1
 fi
-echo -e "${GREEN}✓ npm $(npm -v)${NC}"
+echo "✓ npm $(npm -v)"
 
 if ! command -v docker &> /dev/null; then
-    echo -e "${YELLOW}⚠ Docker is not installed. You'll need it for PostgreSQL.${NC}"
+    echo "⚠ Docker is not installed. You'll need to set up PostgreSQL manually."
+else
+    echo "✓ Docker found"
 fi
 
 echo ""
-echo -e "${BLUE}🔧 Setting up Backend...${NC}"
+echo "[2/6] Starting PostgreSQL database..."
 echo ""
 cd backend
+docker-compose up -d || {
+    echo "⚠ Failed to start Docker. Make sure Docker is running."
+    echo "  You can start PostgreSQL manually later with: docker-compose up -d"
+}
+echo "✓ PostgreSQL started on port 5432"
+
+echo ""
+echo "[3/6] Setting up Backend..."
+echo ""
 
 if [ ! -d "node_modules" ]; then
-    echo "📦 Installing backend dependencies..."
+    echo "Installing backend dependencies..."
     npm install
 else
     echo "✓ Backend dependencies already installed"
 fi
 
 if [ ! -f ".env" ]; then
-    echo "📝 Creating .env file..."
-    cp .env.example .env
-    echo -e "${YELLOW}⚠ Please update backend/.env with your database credentials${NC}"
+    if [ -f ".env.example" ]; then
+        cp .env.example .env
+    else
+        cat > .env << EOF
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_DATABASE=apron_management
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+JWT_EXPIRES_IN=24h
+PORT=3000
+EOF
+    fi
+    echo "✓ Created .env file"
 else
     echo "✓ .env file already exists"
 fi
 
 echo ""
-echo -e "${BLUE}🚀 Backend setup complete!${NC}"
+echo "[4/6] Setting up Frontend..."
 echo ""
-
-cd ..
-
-echo -e "${BLUE}🎨 Setting up Frontend...${NC}"
-echo ""
-cd frontend
+cd ../frontend
 
 if [ ! -d "node_modules" ]; then
-    echo "📦 Installing frontend dependencies..."
+    echo "Installing frontend dependencies..."
     npm install
 else
     echo "✓ Frontend dependencies already installed"
 fi
 
-echo ""
-echo -e "${BLUE}🎉 Frontend setup complete!${NC}"
-echo ""
 cd ..
 
+echo ""
+echo "[5/6] Waiting for database to be ready..."
+echo ""
+sleep 5
+echo "✓ Database should be ready"
+
+echo ""
 echo "╔═══════════════════════════════════════════════════════════╗"
-echo "║              Setup Complete! Next Steps:                   ║"
-echo "╠═══════════════════════════════════════════════════════════╣"
-echo ""
-echo -e "${YELLOW}1. Start PostgreSQL:${NC}"
-echo "   cd backend"
-echo "   docker-compose up -d"
-echo ""
-echo -e "${YELLOW}2. Seed the database:${NC}"
-echo "   npm run seed"
-echo ""
-echo -e "${YELLOW}3. Start the backend (Terminal 1):${NC}"
-echo "   npm run start:dev"
-echo ""
-echo -e "${YELLOW}4. Start the frontend (Terminal 2):${NC}"
-echo "   cd frontend"
-echo "   npm start"
-echo ""
-echo -e "${YELLOW}5. Open browser:${NC}"
-echo "   http://localhost:4200"
-echo ""
-echo "╠═══════════════════════════════════════════════════════════╣"
-echo "For more information, see:"
-echo "  - Backend: backend/README.md"
-echo "  - Frontend: frontend/README.md"
-echo "  - Full Stack: FULLSTACK_README.md"
-echo "║                                                             ║"
+echo "║                    Setup Complete!                         ║"
 echo "╚═══════════════════════════════════════════════════════════╝"
+echo ""
+echo "[6/6] How to run the application:"
+echo ""
+echo "  1. Start the Backend (in a new terminal):"
+echo "     cd backend"
+echo "     npm run start:dev"
+echo ""
+echo "  2. Start the Frontend (in another terminal):"
+echo "     cd frontend"
+echo "     npm start"
+echo ""
+echo "  3. Open in browser:"
+echo "     http://localhost:4200"
+echo ""
+echo "  4. Login with:"
+echo "     Email: admin@apron.local"
+echo "     Password: admin123"
+echo ""
+echo "  Database seeding happens automatically on backend startup."
+echo ""
+echo "Happy coding! ✈️"
+echo ""

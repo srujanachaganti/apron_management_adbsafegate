@@ -30,16 +30,20 @@ export class FlightPlansService {
 
   search(params: SearchFlightPlanRequest): Observable<PaginatedResponse<FlightPlan>> {
     const queryString = new URLSearchParams();
+    if (params.search) queryString.append('search', params.search);
     if (params.carrier) queryString.append('carrier', params.carrier);
     if (params.flightNumber) queryString.append('flightNumber', params.flightNumber);
+    if (params.flightPlanType) queryString.append('flightPlanType', params.flightPlanType);
     if (params.stand) queryString.append('stand', params.stand);
     if (params.apron) queryString.append('apron', params.apron);
     if (params.terminal) queryString.append('terminal', params.terminal);
+    if (params.originDateFrom) queryString.append('originDateFrom', params.originDateFrom);
+    if (params.originDateTo) queryString.append('originDateTo', params.originDateTo);
     if (params.limit) queryString.append('limit', params.limit.toString());
     if (params.page) queryString.append('page', params.page.toString());
 
     return this.http.get<PaginatedResponse<FlightPlan>>(
-      `${this.apiUrl}/search?${queryString.toString()}`,
+      `${this.apiUrl}?${queryString.toString()}`,
     );
   }
 
@@ -55,8 +59,11 @@ export class FlightPlansService {
     return this.http.get<FlightPlan[]>(`${this.apiUrl}/apron/${apron}`);
   }
 
-  getLinkedFlightPlans(flightId: string): Observable<FlightPlan[]> {
-    return this.http.get<FlightPlan[]>(`${this.apiUrl}/linked/${flightId}`);
+  /**
+   * Get linked flight plans by flight plan ID
+   */
+  getLinkedFlightPlans(id: number): Observable<FlightPlan[]> {
+    return this.http.get<FlightPlan[]>(`${this.apiUrl}/${id}/linked`);
   }
 
   create(flightPlan: FlightPlan): Observable<FlightPlan> {

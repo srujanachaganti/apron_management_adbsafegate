@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, In } from 'typeorm';
+import { Repository, ILike, In, MoreThanOrEqual, LessThanOrEqual, Brackets } from 'typeorm';
 import { FlightPlanEntity } from '@database/entities/flight-plan.entity';
 import { CreateFlightPlanDto } from '../dtos/create-flight-plan.dto';
 import { UpdateFlightPlanDto } from '../dtos/update-flight-plan.dto';
@@ -47,32 +47,69 @@ export class FlightPlansService {
   }
 
   async search(searchDto: SearchFlightPlanDto) {
-    const { carrier, flightNumber, stand, apron, terminal, limit = 50, page = 1 } = searchDto;
+    const {
+      search,
+      carrier,
+      flightNumber,
+      flightPlanType,
+      stand,
+      apron,
+      terminal,
+      originDateFrom,
+      originDateTo,
+      limit = 50,
+      page = 1,
+    } = searchDto;
 
-    const where: any = {};
+    const queryBuilder = this.flightPlanRepository
+      .createQueryBuilder('fp')
+      .orderBy('fp.created', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
 
+    // Free-text search across multiple fields
+    if (search) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('fp.calculatedCallsign ILIKE :search', { search: `%${search}%` })
+            .orWhere('fp.carrier ILIKE :search', { search: `%${search}%` })
+            .orWhere('fp.flightNumber ILIKE :search', { search: `%${search}%` })
+            .orWhere('fp.adep ILIKE :search', { search: `%${search}%` })
+            .orWhere('fp.ades ILIKE :search', { search: `%${search}%` })
+            .orWhere('fp.aircraftRegistration ILIKE :search', { search: `%${search}%` });
+        }),
+      );
+    }
+
+    // Specific field filters
     if (carrier) {
-      where.carrier = ILike(`%${carrier}%`);
+      queryBuilder.andWhere('fp.carrier ILIKE :carrier', { carrier: `%${carrier}%` });
     }
     if (flightNumber) {
-      where.flightNumber = ILike(`%${flightNumber}%`);
+      queryBuilder.andWhere('fp.flightNumber ILIKE :flightNumber', { flightNumber: `%${flightNumber}%` });
+    }
+    if (flightPlanType) {
+      queryBuilder.andWhere('fp.flightPlanType = :flightPlanType', { flightPlanType });
     }
     if (stand) {
-      where.stand = ILike(`%${stand}%`);
+      queryBuilder.andWhere('fp.stand ILIKE :stand', { stand: `%${stand}%` });
     }
     if (apron) {
-      where.apron = ILike(`%${apron}%`);
+      queryBuilder.andWhere('fp.apron ILIKE :apron', { apron: `%${apron}%` });
     }
     if (terminal) {
-      where.terminal = ILike(`%${terminal}%`);
+      queryBuilder.andWhere('fp.terminal ILIKE :terminal', { terminal: `%${terminal}%` });
     }
 
-    const [data, total] = await this.flightPlanRepository.findAndCount({
-      where,
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { created: 'DESC' },
-    });
+    // Date range filters
+    if (originDateFrom) {
+      queryBuilder.andWhere('fp.originDate >= :originDateFrom', { originDateFrom });
+    }
+    if (originDateTo) {
+      queryBuilder.andWhere('fp.originDate <= :originDateTo', { originDateTo });
+    }
+
+    const [data, total] = await queryBuilder.getManyAndCount();
 
     return {
       data,
@@ -97,12 +134,40 @@ export class FlightPlansService {
     });
   }
 
-  async getLinkedFlightPlans(flightId: string) {
+  /**
+   * Get linked flight plans by flight plan ID
+   * Links are determined by:
+   * 1. Same linkedFlightId
+   * 2. The flight's linkedFlightId matches another flight's ifplid
+   */
+  async getLinkedFlightPlans(id: number) {
+    const flightPlan = await this.findOne(id);
+
+    if (!flightPlan.linkedFlightId) {
+      return [flightPlan]; // No linked flights, return just this one
+    }
+
+    // Find all flight plans with the same linkedFlightId or matching ifplid
+    const linked = await this.flightPlanRepository
+      .createQueryBuilder('fp')
+      .where('fp.linkedFlightId = :linkedFlightId', {
+        linkedFlightId: flightPlan.linkedFlightId,
+      })
+      .orWhere('fp.ifplid LIKE :linkedFlightId', {
+        linkedFlightId: `${flightPlan.linkedFlightId}%`,
+      })
+      .orderBy('fp.created', 'ASC')
+      .getMany();
+
+    return linked;
+  }
+
+  /**
+   * Legacy method - get by flightId (UUID)
+   */
+  async getLinkedByFlightId(flightId: string) {
     return await this.flightPlanRepository.find({
-      where: [
-        { flightId },
-        { linkedFlightId: flightId },
-      ],
+      where: [{ flightId }, { linkedFlightId: flightId }],
       order: { created: 'DESC' },
     });
   }

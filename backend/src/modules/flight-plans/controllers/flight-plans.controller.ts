@@ -14,11 +14,17 @@ export class FlightPlansController {
   }
 
   @Get()
-  findAll(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ) {
-    return this.flightPlansService.findAll(page || 1, limit || 50);
+  findAll(@Query() searchDto: SearchFlightPlanDto) {
+    // If any search parameters are provided, use search method
+    const hasSearchParams = searchDto.search || searchDto.carrier || searchDto.flightNumber ||
+      searchDto.flightPlanType || searchDto.stand || searchDto.apron || searchDto.terminal ||
+      searchDto.originDateFrom || searchDto.originDateTo;
+
+    if (hasSearchParams) {
+      return this.flightPlansService.search(searchDto);
+    }
+
+    return this.flightPlansService.findAll(searchDto.page || 1, searchDto.limit || 50);
   }
 
   @Get('search')
@@ -44,9 +50,9 @@ export class FlightPlansController {
     return this.flightPlansService.getByApron(apron);
   }
 
-  @Get('linked/:flightId')
-  getLinkedFlightPlans(@Param('flightId') flightId: string) {
-    return this.flightPlansService.getLinkedFlightPlans(flightId);
+  @Get(':id/linked')
+  getLinkedFlightPlans(@Param('id') id: string) {
+    return this.flightPlansService.getLinkedFlightPlans(+id);
   }
 
   @Get(':id')

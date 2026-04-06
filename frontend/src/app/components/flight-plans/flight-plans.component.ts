@@ -16,7 +16,20 @@ import { FlightPlan, SearchFlightPlanRequest } from '../../models/flight-plan.mo
       <div class="search-section">
         <input
           type="text"
-          placeholder="Search by carrier (e.g., AF)"
+          placeholder="Free-text search..."
+          [(ngModel)]="searchText"
+          class="search-input search-wide"
+        />
+        <select [(ngModel)]="searchFlightPlanType" class="search-input">
+          <option value="">All Types</option>
+          <option value="Arrival">Arrival</option>
+          <option value="Departure">Departure</option>
+          <option value="TowOutMovement">Tow Out Movement</option>
+          <option value="TowInMovement">Tow In Movement</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Carrier (e.g., AF)"
           [(ngModel)]="searchCarrier"
           class="search-input"
         />
@@ -33,10 +46,16 @@ import { FlightPlan, SearchFlightPlanRequest } from '../../models/flight-plan.mo
           class="search-input"
         />
         <input
-          type="text"
-          placeholder="Apron"
-          [(ngModel)]="searchApron"
+          type="date"
+          [(ngModel)]="searchOriginDateFrom"
           class="search-input"
+          title="Origin Date From"
+        />
+        <input
+          type="date"
+          [(ngModel)]="searchOriginDateTo"
+          class="search-input"
+          title="Origin Date To"
         />
         <button (click)="performSearch()" class="search-btn">Search</button>
         <button (click)="resetSearch()" class="reset-btn">Reset</button>
@@ -49,10 +68,10 @@ import { FlightPlan, SearchFlightPlanRequest } from '../../models/flight-plan.mo
           <tr>
             <th>ID</th>
             <th>Callsign</th>
-            <th>Aircraft</th>
+            <th>Type</th>
+            <th>Route</th>
             <th>Stand</th>
-            <th>Apron</th>
-            <th>Terminal</th>
+            <th>Origin Date</th>
             <th>Status</th>
             <th>Action</th>
           </tr>
@@ -61,26 +80,28 @@ import { FlightPlan, SearchFlightPlanRequest } from '../../models/flight-plan.mo
           <tr *ngFor="let plan of flightPlans()">
             <td>{{ plan.id }}</td>
             <td>{{ plan.calculatedCallsign }}</td>
-            <td>{{ plan.aircraftType }}</td>
+            <td>
+              <span [class]="'type-' + plan.flightPlanType.toLowerCase()">
+                {{ plan.flightPlanType }}
+              </span>
+            </td>
+            <td>{{ plan.adep }} → {{ plan.ades }}</td>
             <td>{{ plan.stand || '-' }}</td>
-            <td>{{ plan.apron || '-' }}</td>
-            <td>{{ plan.terminal || '-' }}</td>
+            <td>{{ plan.originDate | date: 'shortDate' }}</td>
             <td>
               <span [class]="'status-' + plan.flightPlanAction.toLowerCase()">
                 {{ plan.flightPlanAction }}
               </span>
             </td>
             <td>
-              <a [routerLink]="['/flight-plans', plan.id]" class="action-link"
-                >View</a
-              >
+              <a [routerLink]="['/flight-plans', plan.id]" class="action-link">View</a>
             </td>
           </tr>
         </tbody>
       </table>
 
       <ng-template #noData>
-        <p class="no-data">No flight plans found</p>
+        <p *ngIf="!loading()" class="no-data">No flight plans found</p>
       </ng-template>
 
       <div *ngIf="!loading() && flightPlans().length > 0" class="pagination">
@@ -230,6 +251,39 @@ import { FlightPlan, SearchFlightPlanRequest } from '../../models/flight-plan.mo
         font-weight: 500;
       }
 
+      .type-arrival {
+        background: #cce5ff;
+        color: #004085;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .type-departure {
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .type-towoutmovement, .type-towinmovement {
+        background: #e2e3e5;
+        color: #383d41;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .search-wide {
+        grid-column: span 2;
+      }
+        font-weight: 500;
+      }
+
       .action-link {
         color: #667eea;
         text-decoration: none;
@@ -292,10 +346,14 @@ export class FlightPlansComponent implements OnInit {
   currentPage = signal(1);
   totalPages = signal(1);
 
+  // Search fields
+  searchText = '';
   searchCarrier = '';
   searchFlightNumber = '';
+  searchFlightPlanType = '';
   searchStand = '';
-  searchApron = '';
+  searchOriginDateFrom = '';
+  searchOriginDateTo = '';
 
   constructor(private flightPlansService: FlightPlansService) {}
 
@@ -321,10 +379,13 @@ export class FlightPlansComponent implements OnInit {
   performSearch() {
     this.loading.set(true);
     const searchParams: SearchFlightPlanRequest = {
+      search: this.searchText || undefined,
       carrier: this.searchCarrier || undefined,
       flightNumber: this.searchFlightNumber || undefined,
+      flightPlanType: this.searchFlightPlanType || undefined,
       stand: this.searchStand || undefined,
-      apron: this.searchApron || undefined,
+      originDateFrom: this.searchOriginDateFrom || undefined,
+      originDateTo: this.searchOriginDateTo || undefined,
       page: this.currentPage(),
       limit: 50,
     };
@@ -342,11 +403,26 @@ export class FlightPlansComponent implements OnInit {
     });
   }
 
+  hasSearchParams(): boolean {
+    return !!(
+      this.searchText ||
+      this.searchCarrier ||
+      this.searchFlightNumber ||
+      this.searchFlightPlanType ||
+      this.searchStand ||
+      this.searchOriginDateFrom ||
+      this.searchOriginDateTo
+    );
+  }
+
   resetSearch() {
+    this.searchText = '';
     this.searchCarrier = '';
     this.searchFlightNumber = '';
+    this.searchFlightPlanType = '';
     this.searchStand = '';
-    this.searchApron = '';
+    this.searchOriginDateFrom = '';
+    this.searchOriginDateTo = '';
     this.currentPage.set(1);
     this.loadFlightPlans();
   }
@@ -354,12 +430,7 @@ export class FlightPlansComponent implements OnInit {
   nextPage() {
     if (this.currentPage() < this.totalPages()) {
       this.currentPage.set(this.currentPage() + 1);
-      if (
-        this.searchCarrier ||
-        this.searchFlightNumber ||
-        this.searchStand ||
-        this.searchApron
-      ) {
+      if (this.hasSearchParams()) {
         this.performSearch();
       } else {
         this.loadFlightPlans();
@@ -370,12 +441,7 @@ export class FlightPlansComponent implements OnInit {
   previousPage() {
     if (this.currentPage() > 1) {
       this.currentPage.set(this.currentPage() - 1);
-      if (
-        this.searchCarrier ||
-        this.searchFlightNumber ||
-        this.searchStand ||
-        this.searchApron
-      ) {
+      if (this.hasSearchParams()) {
         this.performSearch();
       } else {
         this.loadFlightPlans();
